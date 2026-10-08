@@ -1,0 +1,67 @@
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:sentinelmesh;DB_CLOSE_DELAY=-1
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      show-details: never # never leak datasource/disk-space internals over an endpoint that's intentionally unauthenticated
+
+sentinelmesh:
+  llm-orchestration-url: ${SENTINELMESH_LLM_ORCHESTRATION_URL:http://localhost:8090}
+  # Comma-separated hostname=agentEndpoint entries; production requires
+  # explicit registration so DNS cannot redirect an authenticated control action.
+  host-registry: ${SENTINELMESH_HOST_REGISTRY:}
+  host-registry-allow-hostname-fallback: ${SENTINELMESH_ALLOW_HOSTNAME_FALLBACK:false}
+  policy-signing-key: ${SENTINELMESH_POLICY_SIGNING_KEY:}
+  audit-log-path: /var/log/sentinelmesh/audit.log
+  # host-agent is addressed by hostname (see HostAgentClient) -- this is
+  # just the fixed port every instance listens on. Quarantine dir,
+  # snapshot dir/paths, persistence-check paths, and sandbox staging dir
+  # all now live in EACH HOST AGENT's own config (see
+  # host-agent/README.md's env var table), not here -- control-plane no
+  # longer touches any of those directly.
+  host-agent:
+    port: 9090
+  reclaim:
+    correlation-window-minutes: 15
+    snapshot-interval-minutes: 60
+    resume-check-interval-seconds: 30
+  credentials:
+    revocation-webhook: ${SENTINELMESH_CREDENTIAL_REVOCATION_WEBHOOK:}
+    revocation-api-key: ${SENTINELMESH_CREDENTIAL_REVOCATION_API_KEY:}
+  compromise:
+    check-interval-seconds: 60
+    lookback-minutes: 10
+  deploy:
+    canary-bake-minutes: ${SENTINELMESH_CANARY_BAKE_MINUTES:30}
+    canary-check-interval-minutes: ${SENTINELMESH_CANARY_CHECK_INTERVAL_MINUTES:5}
+  security:
+    # DEV-ONLY PLACEHOLDER VALUES. Each caller (detection-engine,
+    # llm-orchestration) needs a real, unique key here before any
+    # real deployment -- generate with e.g. `openssl rand -hex 32`,
+    # source from environment/a secrets manager, and never commit real
+    # values. Format: "callerName:key,callerName2:key2".
+    api-keys: "detection-engine:${DETECTION_ENGINE_KEY:CHANGE-ME-detection-engine-dev-key},llm-orchestration:${LLM_ORCHESTRATION_KEY:CHANGE-ME-llm-orchestration-dev-key},security-automation:${SECURITY_AUTOMATION_KEY:CHANGE-ME-security-automation-dev-key}"
+    # Key control-plane itself sends to llm-orchestration's /handle-incident.
+    # Also a dev placeholder -- must match llm-orchestration's
+    # SENTINELMESH_API_KEY env var.
+    llm-orchestration-api-key: "${CONTROL_PLANE_TO_LLM_KEY:CHANGE-ME-control-plane-to-llm-dev-key}"
+    # Key control-plane sends to EVERY host-agent instance -- a fleet-wide
+    # shared secret, same posture as the other two. Must match every
+    # host-agent's own SENTINELMESH_API_KEY. A real deployment with
+    # meaningfully different trust levels per host might want per-host
+    # keys instead; out of scope for this deployment profile.
+    host-agent-api-key: "${CONTROL_PLANE_TO_HOST_AGENT_KEY:CHANGE-ME-control-plane-to-host-agent-dev-key}"

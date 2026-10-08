@@ -1,0 +1,179 @@
+services:
+  falco:
+    image: ${FALCO_IMAGE:-docker.io/falcosecurity/falco:0.45.0}
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    privileged: true
+    environment:
+      HOST_ROOT: /host
+      FALCO_HOSTNAME: ${SENTINELMESH_HOSTNAME:?set SENTINELMESH_HOSTNAME}
+    command: ["/usr/bin/falco", "-c", "/etc/falco/falco.yaml"]
+    volumes:
+      - ./falco/falco.yaml:/etc/falco/falco.yaml:ro
+      - ../detection-engine/falco-rules/sentinelmesh_rules.yaml:/etc/falco/rules.d/sentinelmesh_rules.yaml:ro
+      - /sys/kernel/tracing:/sys/kernel/tracing:ro
+      - /sys/kernel/btf:/sys/kernel/btf:ro
+      - /proc:/host/proc:ro
+      - /etc:/host/etc:ro
+      - /var/run/docker.sock:/host/var/run/docker.sock
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sentinelmesh
+      POSTGRES_USER: sentinelmesh
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - sentinelmesh-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinelmesh -d sentinelmesh"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  control-plane:
+    build: ../control-plane
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/sentinelmesh
+      SPRING_DATASOURCE_USERNAME: sentinelmesh
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      SENTINELMESH_API_KEYS: ${SENTINELMESH_API_KEYS:?set SENTINELMESH_API_KEYS}
+      CONTROL_PLANE_TO_LLM_KEY: ${CONTROL_PLANE_TO_LLM_KEY:?set CONTROL_PLANE_TO_LLM_KEY}
+      CONTROL_PLANE_TO_HOST_AGENT_KEY: ${CONTROL_PLANE_TO_HOST_AGENT_KEY:?set CONTROL_PLANE_TO_HOST_AGENT_KEY}
+      SENTINELMESH_POLICY_SIGNING_KEY: ${SENTINELMESH_POLICY_SIGNING_KEY:?set SENTINELMESH_POLICY_SIGNING_KEY}
+      SENTINELMESH_HOST_REGISTRY: ${SENTINELMESH_HOST_REGISTRY:?set SENTINELMESH_HOST_REGISTRY}
+      SENTINELMESH_LLM_ORCHESTRATION_URL: http://llm-orchestration:8090
+      SENTINELMESH_AUDIT_LOG_PATH: /app/audit/audit.log
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - sentinelmesh-audit:/app/audit
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  llm-orchestration:
+    build: ../llm-orchestration
+    restart: unless-stopped
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    environment:
+      CONTROL_PLANE_URL: http://control-plane:8080
+      CONTROL_PLANE_API_KEY: ${LLM_ORCHESTRATION_KEY:?set LLM_ORCHESTRATION_KEY}
+      SENTINELMESH_API_KEY: ${CONTROL_PLANE_TO_LLM_KEY:?set CONTROL_PLANE_TO_LLM_KEY}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      SENTINELMESH_RCA_MODEL: ${SENTINELMESH_RCA_MODEL:-qwen2.5:14b}
+      SENTINELMESH_PATCH_MODEL: ${SENTINELMESH_PATCH_MODEL:-qwen2.5-coder:14b}
+      SENTINELMESH_JUDGE_MODEL: ${SENTINELMESH_JUDGE_MODEL:-qwen2.5:14b}
+      GUNICORN_BIND: 0.0.0.0:8090
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=2).read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  detection-engine:
+    build:
+      context: ../detection-engine
+      args:
+        BUILD_TAGS: ${DETECTION_BUILD_TAGS:-sentinel_native}
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    cap_add: [NET_ADMIN, SYS_PTRACE, KILL, BPF, PERFMON]
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    environment:
+      SENTINELMESH_HOSTNAME: ${SENTINELMESH_HOSTNAME:?set SENTINELMESH_HOSTNAME}
+      CONTROL_PLANE_URL: http://127.0.0.1:8080
+      CONTROL_PLANE_API_KEY: ${DETECTION_ENGINE_KEY:?set DETECTION_ENGINE_KEY}
+      POLICY_PATH: /var/lib/sentinelmesh/policy/current.json
+      POLICY_SIGNING_KEY: ${SENTINELMESH_POLICY_SIGNING_KEY:?set SENTINELMESH_POLICY_SIGNING_KEY}
+      RESPONSE_MODE: ${RESPONSE_MODE:-enforce}
+      HOST_ROOT: /hostfs
+      METRICS_ADDR: ${METRICS_ADDR:-127.0.0.1:2112}
+      LOCAL_AUDIT_LOG_PATH: /var/lib/sentinelmesh/audit/detector.log
+      INCIDENT_SPOOL_DIR: /var/lib/sentinelmesh/incidents/outbox
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2112/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    volumes:
+      - sentinelmesh-host-state:/var/lib/sentinelmesh
+      - /:/hostfs:rw
+      - /run/falco:/run/falco:ro
+
+  host-agent:
+    hostname: ${SENTINELMESH_HOSTNAME:?set SENTINELMESH_HOSTNAME}
+    build: ../host-agent
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    privileged: true
+    environment:
+      LISTEN_ADDR: :9090
+      SENTINELMESH_API_KEY: ${CONTROL_PLANE_TO_HOST_AGENT_KEY:?set CONTROL_PLANE_TO_HOST_AGENT_KEY}
+      SENTINELMESH_POLICY_SIGNING_KEY: ${SENTINELMESH_POLICY_SIGNING_KEY:?set SENTINELMESH_POLICY_SIGNING_KEY}
+      POLICY_PATH: /var/lib/sentinelmesh/policy/current.json
+      QUARANTINE_DIR: /var/lib/sentinelmesh/quarantine
+      SNAPSHOT_DIR: /var/lib/sentinelmesh/snapshots
+      SANDBOX_STAGING_DIR: /var/lib/sentinelmesh/sandbox-staging
+      SANDBOX_RUNTIME: ${SANDBOX_RUNTIME:-runsc}
+      SENTINELMESH_CREDENTIAL_REVOCATION_WEBHOOK: ${SENTINELMESH_CREDENTIAL_REVOCATION_WEBHOOK:-}
+      SENTINELMESH_CREDENTIAL_REVOCATION_API_KEY: ${SENTINELMESH_CREDENTIAL_REVOCATION_API_KEY:-}
+      HOST_ROOT: /hostfs
+      SENTINELMESH_HOST_IP: ${SENTINELMESH_HOST_IP:-}
+    depends_on:
+      - sandbox-image
+    volumes:
+      - sentinelmesh-host-state:/var/lib/sentinelmesh
+      - /:/hostfs:rw
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+
+  sandbox-image:
+    image: sentinelmesh-sandbox:latest
+    build:
+      context: ../sandbox
+      dockerfile: Dockerfile.sandbox
+    command: ["-lc", "true"]
+    restart: "no"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - control-plane
+      - detection-engine
+    command: ["--config.file=/etc/prometheus/prometheus.yml","--storage.tsdb.path=/prometheus","--web.listen-address=127.0.0.1:9091"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - sentinelmesh-prometheus:/prometheus
+
+volumes:
+  sentinelmesh-postgres:
+  sentinelmesh-audit:
+  sentinelmesh-host-state:
+  sentinelmesh-prometheus:

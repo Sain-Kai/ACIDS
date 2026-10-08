@@ -1,0 +1,130 @@
+# CI for all four services (host-agent, detection-engine, control-plane,
+# llm-orchestration) plus the Falco rules pack. This is the real
+# build/test verification the sandbox this project was scaffolded in
+# couldn't do locally (no Go/Java/clang/bpftool toolchains, no network) --
+# treat a green run here as the actual first compile of this code, not
+# this workflow file itself.
+#
+# The detection-engine job is the newest/least-proven part of this: it's
+# the first real attempt at generating and building the eBPF probes in an
+# automated environment, and may need adjustment based on what GitHub's
+# runners actually support (BTF availability, bpftool packaging) -- don't
+# be surprised if it needs a follow-up fix. host-agent's tests don't need
+# root or a real Docker/iptables/usermod environment to pass (every
+# system call is faked or guarded behind input validation that rejects
+# before reaching one) -- see host-agent/README.md's own note that this
+# means the real system-call paths are unverified beyond that.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.14'
+
+      - name: Build
+        run: cd host-agent && go build ./...
+
+      - name: Vet
+        run: cd host-agent && go vet ./...
+
+      - name: Test
+        run: cd host-agent && go test ./... -v
+
+  detection-engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.14'
+
+      - name: Install eBPF build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm libbpf-dev linux-tools-common linux-tools-generic bpftool || \
+          sudo apt-get install -y clang llvm libbpf-dev linux-tools-common "linux-tools-$(uname -r)"
+
+      - name: Generate vmlinux.h
+        run: |
+          cd detection-engine/internal/ingest/probes
+          make vmlinux-header
+
+      - name: go mod tidy
+        run: cd detection-engine && go mod tidy
+
+      - name: Generate eBPF bindings
+        run: cd detection-engine/internal/ingest/probes && make generate
+
+      - name: Build
+        run: cd detection-engine && go build ./...
+
+      - name: Vet
+        run: cd detection-engine && go vet ./...
+
+      - name: Test
+        run: cd detection-engine && go test ./... -v
+
+  control-plane:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build and test
+        run: cd control-plane && mvn -B verify
+
+  llm-orchestration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: cd llm-orchestration && pip install -r requirements.txt
+
+      - name: Syntax check
+        run: cd llm-orchestration && python -m py_compile app.py orchestrator.py ollama_client.py agents/*.py
+
+      - name: Safety tests
+        run: cd llm-orchestration && PYTHONPATH=. python -m unittest discover -v
+
+      - name: Lint
+        run: |
+          pip install ruff
+          cd llm-orchestration && ruff check .
+
+  falco-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate YAML syntax
+        run: |
+          pip install pyyaml
+          python -c "import yaml; yaml.safe_load(open('detection-engine/falco-rules/sentinelmesh_rules.yaml'))"
+      - name: Validate Falco configuration and rules
+        run: |
+          docker run --rm --privileged \
+            -v "${{ github.workspace }}/deploy/falco/falco.yaml:/etc/falco/falco.yaml:ro" \
+            -v "${{ github.workspace }}/detection-engine/falco-rules/sentinelmesh_rules.yaml:/etc/falco/rules.d/sentinelmesh_rules.yaml:ro" \
+            docker.io/falcosecurity/falco:0.45.0 \
+            falco -c /etc/falco/falco.yaml -V /etc/falco/rules.d/sentinelmesh_rules.yaml

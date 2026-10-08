@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sentinelmesh.internal/schema/event.schema.json",
+  "title": "SentinelMesh Normalized Event",
+  "description": "Common representation every ingest source (eBPF, Falco, future sources) is normalized into before it reaches the detection engine.",
+  "type": "object",
+  "required": ["event_id", "timestamp", "source", "host", "event_type", "severity_raw"],
+  "properties": {
+    "event_id": { "type": "string", "description": "UUID assigned at normalization time" },
+    "correlation_id": { "type": "string", "description": "Groups events belonging to the same incident/session" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "source": { "type": "string", "enum": ["ebpf", "falco", "manual", "other"] },
+    "host": {
+      "type": "object",
+      "required": ["hostname"],
+      "properties": {
+        "hostname": { "type": "string" },
+        "ip": { "type": "string" },
+        "container_id": { "type": "string" },
+        "container_image": { "type": "string" }
+      }
+    },
+    "event_type": {
+      "type": "string",
+      "description": "e.g. process_exec, network_connect, file_write, syscall, privilege_change"
+    },
+    "process": {
+      "type": "object",
+      "properties": {
+        "pid": { "type": "integer" },
+        "ppid": { "type": "integer" },
+        "exe": { "type": "string" },
+        "cmdline": { "type": "string" },
+        "user": { "type": "string" }
+      }
+    },
+    "network": {
+      "type": "object",
+      "properties": {
+        "src_ip": { "type": "string" },
+        "dst_ip": { "type": "string" },
+        "src_port": { "type": "integer" },
+        "dst_port": { "type": "integer" },
+        "protocol": { "type": "string" }
+      }
+    },
+    "file": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "operation": { "type": "string", "enum": ["read", "write", "create", "delete", "chmod", "rename"] }
+      }
+    },
+    "syscall": { "type": "string" },
+    "severity_raw": {
+      "type": "string",
+      "description": "Severity as reported by the source, before SentinelMesh's own scoring",
+      "enum": ["debug", "info", "notice", "warning", "error", "critical", "alert", "emergency"]
+    },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "raw_payload": { "type": "object", "description": "Original untransformed event, kept for forensics" }
+  }
+}

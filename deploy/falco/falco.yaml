@@ -1,0 +1,53 @@
+# SentinelMesh production Falco configuration.
+# Compatible with current Falco releases that provide HTTP output.
+# Falco 0.44+ removed gRPC output/server, so SentinelMesh's default
+# integration is local HTTP JSON output into the detector.
+
+json_output: true
+json_include_output_property: true
+json_include_output_fields_property: true
+json_include_tags_property: true
+json_include_message_property: true
+buffered_outputs: false
+priority: warning
+
+engine:
+  kind: modern_ebpf
+  buf_size_preset: 4
+  drop_failed_exit: false
+  cpus_for_each_buffer: 2
+
+rules_files:
+  - /etc/falco/falco_rules.yaml
+  - /etc/falco/rules.d/sentinelmesh_rules.yaml
+
+http_output:
+  enabled: true
+  url: http://127.0.0.1:8766/falco/events
+  user_agent: SentinelMesh-Falco/1
+  insecure: false
+  keep_alive: true
+  compress_uploads: false
+  max_consecutive_timeouts: 5
+
+stdout_output:
+  enabled: false
+
+syslog_output:
+  enabled: false
+
+webserver:
+  enabled: true
+  listen_port: 8765
+  listen_address: 127.0.0.1
+  prometheus_metrics_enabled: true
+
+metrics:
+  enabled: true
+  interval: 15s
+  rules_counters_enabled: true
+  resource_utilization_enabled: true
+  state_counters_enabled: true
+  kernel_event_counters_enabled: true
+  libbpf_stats_enabled: true
+  plugins_metrics_enabled: true

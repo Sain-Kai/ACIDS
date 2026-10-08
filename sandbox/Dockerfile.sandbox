@@ -1,0 +1,32 @@
+# Baseline dev sandbox for dynamic analysis of suspicious artifacts flagged
+# by the detection engine but not confidently classified.
+#
+# This is a plain-Docker starting point only. For production, run this
+# under gVisor (runsc) or Firecracker instead of the default runc runtime
+# -- a suspicious binary should never share a kernel with the host.
+#
+# Invoked by SandboxAnalysisService.java as:
+#
+#   docker run --rm \
+#     --network none \
+#     --read-only \
+#     --cap-drop=ALL \
+#     --security-opt no-new-privileges \
+#     --memory=512m --cpus=1 \
+#     -v <artifact_path>:/sandbox/payload:ro \
+#     sentinelmesh-sandbox \
+#     /sandbox/analyze.sh /sandbox/payload
+
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends file binutils coreutils \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -u 10001 sandboxuser
+WORKDIR /sandbox
+COPY analyze.sh /sandbox/analyze.sh
+RUN chmod +x /sandbox/analyze.sh && chown sandboxuser:sandboxuser /sandbox/analyze.sh
+USER sandboxuser
+
+ENTRYPOINT ["/bin/bash"]
