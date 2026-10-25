@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!--
+      Local/dev: plain human-readable console output (the "dev" Spring
+      profile, or no profile at all, gets this).
+      Anything else (staging/prod profiles): structured JSON to stdout,
+      the shape a real log-aggregation pipeline (ELK, Loki, CloudWatch
+      Logs Insights, etc.) actually wants: one JSON object per line,
+      queryable by field instead of grep'd out of a text blob.
+
+      This governs Spring/framework and application logging via the
+      console appender either way; it does NOT change AuditLogger's own
+      flat-file output, which is a deliberately separate, append-only
+      trail (see AuditLogger's own class comment).
+    -->
+
+    <springProfile name="!staging &amp; !prod">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
+            </encoder>
+        </appender>
+    </springProfile>
+
+    <springProfile name="staging,prod">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <customFields>{"service":"sentinelmesh-control-plane"}</customFields>
+            </encoder>
+        </appender>
+    </springProfile>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <logger name="com.sentinelmesh" level="INFO"/>
+</configuration>

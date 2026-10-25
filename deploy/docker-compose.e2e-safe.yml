@@ -1,0 +1,33 @@
+# Safe integration-test overlay.
+# The E2E script selects only postgres, control-plane, llm-orchestration, and
+# detection-engine. Falco, host-agent, and Prometheus are deliberately not
+# started. No privileged capabilities or host PID/network namespaces are used.
+services:
+  control-plane:
+    environment:
+      SENTINELMESH_HOST_REGISTRY: ""
+      SENTINELMESH_RECLAIM_ENABLED: "false"
+  detection-engine:
+    network_mode: !reset null
+    pid: !reset null
+    cap_add: !reset []
+    build:
+      args:
+        BUILD_TAGS: e2e
+    environment:
+      CONTROL_PLANE_URL: http://control-plane:8080
+      FALCO_HTTP_ADDR: 0.0.0.0:8766
+      METRICS_ADDR: 0.0.0.0:2112
+      HOST_ROOT: /hostfs
+      RESPONSE_MODE: dry-run
+    ports:
+      - "127.0.0.1:8766:8766"
+      - "127.0.0.1:2112:2112"
+    volumes: !override
+      - sentinelmesh-host-state:/var/lib/sentinelmesh
+      - sentinelmesh-e2e-hostroot:/hostfs:ro
+      - sentinelmesh-e2e-falco:/run/falco:ro
+
+volumes:
+  sentinelmesh-e2e-hostroot:
+  sentinelmesh-e2e-falco:

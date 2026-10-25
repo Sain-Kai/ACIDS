@@ -1,0 +1,182 @@
+# SentinelMesh's custom Falco rules.
+#
+# These run ALONGSIDE Falco's own stock ruleset, not instead of it --
+# Falco already ships strong default coverage (e.g. "Terminal shell in
+# container", "Write below etc", "Launch Privileged Container") that
+# these deliberately don't duplicate. Run both together:
+#
+#   falco -r /etc/falco/falco_rules.yaml -r sentinelmesh_rules.yaml
+#
+# Every rule's `output:` includes the exact field tokens (%proc.exe,
+# %proc.cmdline, %user.name, %container.id, ...) that
+# detection-engine/internal/normalize/normalize.go's normalizeFalco()
+# expects to find as keys in Falco's output_fields -- if you add rules of
+# your own, keep those tokens in the output template or the Go side
+# won't see them.
+#
+# Priorities map to detection-engine's own scoring only loosely (Falco
+# rules that already carry strong signal are CRITICAL/WARNING; SentinelMesh's
+# own detect.Engine still does its own threshold math on top of whatever
+# Falco reports -- see internal/detect/engine.go).
+
+- list: sentinelmesh_web_server_procs
+  items: [nginx, apache2, httpd, java, node, python, python3, gunicorn, uwsgi]
+
+- list: sentinelmesh_shell_binaries
+  items: [sh, bash, dash, zsh, ash]
+
+- list: sentinelmesh_reverse_shell_patterns
+  items: [
+    "/dev/tcp/", "/dev/udp/", "nc -e", "ncat -e", "bash -i", "sh -i",
+    "socket.socket(socket.AF_INET", "os.dup2(s.fileno"
+  ]
+
+- list: sentinelmesh_cryptominer_patterns
+  items: [xmrig, "stratum+tcp", minerd, cpuminer, ethminer]
+
+- list: sentinelmesh_escalation_binaries
+  items: [su, sudo, pkexec, doas]
+
+- macro: sentinelmesh_container
+  condition: (container.id != host)
+
+# ---------------------------------------------------------------------
+# Initial access / execution
+# ---------------------------------------------------------------------
+
+- rule: SentinelMesh - Shell spawned from web or app server process
+  desc: >
+    A shell was spawned as a child of a process that normally shouldn't
+    be launching one -- a classic web-shell / RCE indicator. Mirrors
+    detect.ShellFromWebProcessRule on the Go side, as an independent
+    Falco-native signal rather than only a post-hoc heuristic over raw
+    syscall events.
+  condition: >
+    spawned_process and
+    proc.name in (sentinelmesh_shell_binaries) and
+    proc.pname in (sentinelmesh_web_server_procs)
+  output: >
+    SentinelMesh: shell spawned from web/app server process
+    (user=%user.name shell=%proc.name parent=%proc.pname cmdline=%proc.cmdline
+    exe=%proc.exe container=%container.id image=%container.image.repository)
+  priority: CRITICAL
+  tags: [sentinelmesh, initial_access, mitre_initial_access]
+
+- rule: SentinelMesh - Reverse shell command pattern
+  desc: >
+    Command line matches a well-published reverse-shell one-liner
+    pattern (bash /dev/tcp redirection, nc -e, Python socket+dup2, etc).
+  condition: >
+    spawned_process and
+    proc.cmdline contains anyof (sentinelmesh_reverse_shell_patterns)
+  output: >
+    SentinelMesh: reverse shell command pattern detected
+    (user=%user.name cmdline=%proc.cmdline exe=%proc.exe
+    container=%container.id image=%container.image.repository)
+  priority: CRITICAL
+  tags: [sentinelmesh, execution, mitre_execution]
+
+# ---------------------------------------------------------------------
+# Privilege escalation
+# ---------------------------------------------------------------------
+
+- rule: SentinelMesh - Privilege escalation from service process
+  desc: >
+    su/sudo/pkexec/doas spawned from a process with no business
+    escalating privileges interactively (a web/app server rather than an
+    interactive shell).
+  condition: >
+    spawned_process and
+    proc.name in (sentinelmesh_escalation_binaries) and
+    proc.pname in (sentinelmesh_web_server_procs)
+  output: >
+    SentinelMesh: privilege escalation attempted from service process
+    (user=%user.name escalation_bin=%proc.name parent=%proc.pname
+    cmdline=%proc.cmdline exe=%proc.exe container=%container.id)
+  priority: CRITICAL
+  tags: [sentinelmesh, privilege_escalation, mitre_privilege_escalation]
+
+# ---------------------------------------------------------------------
+# Persistence
+# ---------------------------------------------------------------------
+
+- rule: SentinelMesh - Write to cron, systemd unit, or SSH authorized_keys
+  desc: >
+    A write to one of the most common Linux persistence locations --
+    cron directories, a systemd unit file, or an authorized_keys file.
+  condition: >
+    open_write and
+    (fd.name startswith /etc/cron.d or
+     fd.name startswith /etc/cron.daily or
+     fd.name startswith /etc/cron.hourly or
+     fd.name startswith /etc/cron.weekly or
+     fd.name startswith /var/spool/cron or
+     fd.name = /etc/crontab or
+     (fd.name startswith /etc/systemd/system and fd.name endswith .service) or
+     (fd.name startswith /lib/systemd/system and fd.name endswith .service) or
+     fd.name contains .ssh/authorized_keys)
+  output: >
+    SentinelMesh: write to a common persistence location
+    (user=%user.name file=%fd.name proc=%proc.name cmdline=%proc.cmdline
+    exe=%proc.exe container=%container.id)
+  priority: WARNING
+  tags: [sentinelmesh, persistence, mitre_persistence]
+
+# ---------------------------------------------------------------------
+# Credential access
+# ---------------------------------------------------------------------
+
+- rule: SentinelMesh - Cloud metadata service access
+  desc: >
+    Outbound connection to the cloud-provider instance-metadata service
+    (169.254.169.254 is used by AWS/GCP/Azure alike) -- a common way to
+    steal instance credentials once code execution is achieved,
+    especially relevant behind an SSRF-style entry point.
+  condition: >
+    evt.type=connect and
+    fd.typechar=4 and
+    fd.dip=169.254.169.254
+  output: >
+    SentinelMesh: connection to cloud metadata service
+    (user=%user.name proc=%proc.name cmdline=%proc.cmdline exe=%proc.exe
+    dip=%fd.dip dport=%fd.dport container=%container.id)
+  priority: WARNING
+  tags: [sentinelmesh, credential_access, mitre_credential_access]
+
+# ---------------------------------------------------------------------
+# Defense evasion / container escape
+# ---------------------------------------------------------------------
+
+- rule: SentinelMesh - Container escape indicator
+  desc: >
+    Process activity referencing common container-escape vectors -- the
+    Docker control socket, /proc/1/root (the host filesystem as seen
+    from inside a container), or an nsenter invocation.
+  condition: >
+    (spawned_process and proc.cmdline contains nsenter) or
+    (open_read and (fd.name = /var/run/docker.sock or fd.name startswith /proc/1/root))
+  output: >
+    SentinelMesh: container escape indicator
+    (user=%user.name proc=%proc.name cmdline=%proc.cmdline exe=%proc.exe
+    file=%fd.name container=%container.id image=%container.image.repository)
+  priority: CRITICAL
+  tags: [sentinelmesh, defense_evasion, mitre_privilege_escalation]
+
+# ---------------------------------------------------------------------
+# Impact
+# ---------------------------------------------------------------------
+
+- rule: SentinelMesh - Cryptominer indicator
+  desc: >
+    Common miner-binary command-line signatures (xmrig, stratum+tcp
+    protocol reference, etc) -- the most common noisy post-compromise
+    monetization path.
+  condition: >
+    spawned_process and
+    proc.cmdline contains anyof (sentinelmesh_cryptominer_patterns)
+  output: >
+    SentinelMesh: cryptominer command line detected
+    (user=%user.name cmdline=%proc.cmdline exe=%proc.exe
+    container=%container.id image=%container.image.repository)
+  priority: WARNING
+  tags: [sentinelmesh, impact, mitre_impact]

@@ -1,0 +1,17 @@
+{
+  "falco_http_addr": "127.0.0.1:8766",
+  "falco_http_path": "/falco/events",
+  "policy_path": "/var/lib/sentinelmesh/policy/current.json",
+  "policy_signing_key": "",
+  "event_file": "",
+  "thresholds": {
+    "contain": 0.6,
+    "block": 0.85,
+    "reclaim": 0.95
+  },
+  "quarantine_dir": "/var/lib/sentinelmesh/quarantine",
+  "host_root": "/",
+  "control_plane_url": "http://127.0.0.1:8080",
+  "control_plane_api_key": "",
+  "response_mode": "enforce"
+}

@@ -1,0 +1,97 @@
+# Local dev wiring. Falco itself is not containerized here -- it needs
+# privileged host access (kernel module or eBPF probe) and is normally run
+# as a host-level daemon/service. Point FALCO_HTTP_ADDR/FALCO_HTTP_PATH at the local Falco HTTP output
+# listener. Current Falco uses HTTP output; HTTP is the sole production Falco transport.
+#
+# API-key auth: control-plane's application.yml already bakes in
+# DEV-ONLY placeholder keys for its three callers/targets (detection-engine,
+# llm-orchestration, host-agent) plus the keys it sends outbound to
+# llm-orchestration and host-agent. The environment entries below give
+# each service the matching values -- literal string equality, not any
+# YAML/Spring substitution magic, so keep them in sync by hand if you
+# change one side. Override every *_KEY variable here (and the
+# corresponding sentinelmesh.security.* values in control-plane's
+# application.yml) with real generated secrets -- e.g.
+# `openssl rand -hex 32` -- before this leaves a laptop.
+#
+# Hostname wiring for host-agent: control-plane addresses each host's
+# agent by the hostname recorded on its events (see
+# detection-engine/internal/normalize/normalize.go's detectHostname(),
+# and HostAgentClient on the control-plane side). detection-engine is
+# given an explicit `hostname:` below so that value is predictable, and
+# host-agent is given a matching network alias so Docker's DNS resolves
+# it. In a real (non-Compose) deployment this is just each host's real
+# hostname and its agent listening locally -- no alias trickery needed.
+
+services:
+  detection-engine:
+    build: ../detection-engine
+    hostname: sentinelmesh-dev-host
+    environment:
+      - FALCO_HTTP_ADDR=${FALCO_HTTP_ADDR:-127.0.0.1:8766}
+      - FALCO_HTTP_PATH=${FALCO_HTTP_PATH:-/falco/events}
+      - CONTROL_PLANE_URL=http://control-plane:8080
+      # Must equal control-plane's sentinelmesh.security.api-keys
+      # "detection-engine:" entry.
+      - CONTROL_PLANE_API_KEY=${DETECTION_ENGINE_KEY:-CHANGE-ME-detection-engine-dev-key}
+      - SENTINELMESH_HOST_IP=${SENTINELMESH_HOST_IP:-}
+    depends_on:
+      - control-plane
+    # Needs host PID/network namespace access for real containment actions
+    # (kill_process, iptables). Uncomment for real use, not needed to boot
+    # the lab stack:
+    # network_mode: host
+    # pid: host
+    # cap_add: [NET_ADMIN, SYS_PTRACE]
+
+  control-plane:
+    build: ../control-plane
+    ports:
+      - "8080:8080"
+    environment:
+      - SENTINELMESH_LLM_ORCHESTRATION_URL=http://llm-orchestration:8090
+      # sentinelmesh.security.api-keys, .llm-orchestration-api-key, and
+      # .host-agent-api-key are all left at their application.yml
+      # DEV-ONLY fallbacks here -- those defaults are exactly
+      # what detection-engine's config.yaml, llm-orchestration's
+      # environment, and host-agent's environment below already expect
+      # to see.
+
+  llm-orchestration:
+    build: ../llm-orchestration
+    ports:
+      - "8090:8090"
+    environment:
+      - CONTROL_PLANE_URL=http://control-plane:8080
+      # Must equal control-plane's sentinelmesh.security.api-keys
+      # "llm-orchestration:" entry.
+      - CONTROL_PLANE_API_KEY=${LLM_ORCHESTRATION_KEY:-CHANGE-ME-llm-orchestration-dev-key}
+      # Required -- app.py has no default and refuses to start without
+      # it. Must equal control-plane's
+      # sentinelmesh.security.llm-orchestration-api-key.
+      - SENTINELMESH_API_KEY=${CONTROL_PLANE_TO_LLM_KEY:-CHANGE-ME-control-plane-to-llm-dev-key}
+      # macOS/Windows Docker Desktop: host.docker.internal resolves to the
+      # host. On Linux add extra_hosts as shown below instead.
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - GUNICORN_BIND=0.0.0.0:8090
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - control-plane
+
+  # host-agent is NOT started by a plain `docker compose up` -- it's
+  # genuinely dangerous to run with real privileges against your own
+  # laptop by accident (it can firewall the host, kill processes, and
+  # lock accounts). Uncomment the capabilities/mounts below, build the
+  # sentinelmesh-sandbox image first if you want sandbox-analyze to work
+  # (`docker build -t sentinelmesh-sandbox ../sandbox`), and run it
+  # deliberately: `docker compose --profile host-agent up`.
+  host-agent:
+    profiles: ["host-agent"]
+    build: ../host-agent
+    networks:
+      default:
+        aliases:
+          - sentinelmesh-dev-host
+    environment:
+      - SENTINELMESH_API_KEY=${CONTROL_PLANE_TO_HOST_AGENT_KEY:-CHANGE-ME-control-plane-to-host-agent-dev-key}
