@@ -1,0 +1,178 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 480" width="100%" height="100%">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#050814" />
+      <stop offset="45%" stop-color="#0c0e23" />
+      <stop offset="80%" stop-color="#150a21" />
+      <stop offset="100%" stop-color="#07030c" />
+    </linearGradient>
+
+    <linearGradient id="neonCyanPink" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00f2fe" />
+      <stop offset="35%" stop-color="#4facfe" />
+      <stop offset="70%" stop-color="#b000ff" />
+      <stop offset="100%" stop-color="#ff007f" />
+    </linearGradient>
+
+    <linearGradient id="cyberLockGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff007f" />
+      <stop offset="40%" stop-color="#bf00ff" />
+      <stop offset="100%" stop-color="#00d2ff" />
+    </linearGradient>
+
+    <linearGradient id="borderGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe" stop-opacity="0.8"/>
+      <stop offset="50%" stop-color="#b000ff" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#ff007f" stop-opacity="0.9"/>
+    </linearGradient>
+
+    <radialGradient id="lockAura" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#e01290" stop-opacity="0.6"/>
+      <stop offset="40%" stop-color="#8000ff" stop-opacity="0.3"/>
+      <stop offset="75%" stop-color="#00d2ff" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="blueTechAura" cx="15%" cy="20%" r="60%">
+      <stop offset="0%" stop-color="#00d2ff" stop-opacity="0.2"/>
+      <stop offset="60%" stop-color="#050814" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Filters -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <filter id="heavyGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="18" result="blur1" />
+      <feGaussianBlur stdDeviation="28" result="blur2" />
+      <feMerge>
+        <feMergeNode in="blur2" />
+        <feMergeNode in="blur1" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <pattern id="cyberGrid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#2a3356" stroke-width="0.75" stroke-opacity="0.25"/>
+      <circle cx="40" cy="40" r="1" fill="#00f2fe" fill-opacity="0.3"/>
+    </pattern>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="1280" height="480" fill="url(#bgGradient)"/>
+  <rect width="1280" height="480" fill="url(#blueTechAura)"/>
+  <rect width="1280" height="480" fill="url(#cyberGrid)"/>
+
+  <!-- High-Tech Neon Border inspired by Intel+ASUS Glowing Bevel -->
+  <rect x="14" y="14" width="1252" height="452" rx="16" fill="none" stroke="url(#borderGlow)" stroke-width="1.8" filter="url(#glow)"/>
+  <rect x="18" y="18" width="1244" height="444" rx="13" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1"/>
+
+  <!-- HUD Decorative Corner Brackets -->
+  <path d="M 24 60 L 24 24 L 60 24" fill="none" stroke="#00f2fe" stroke-width="3" stroke-linecap="round"/>
+  <path d="M 1256 60 L 1256 24 L 1220 24" fill="none" stroke="#ff007f" stroke-width="3" stroke-linecap="round"/>
+  <path d="M 24 420 L 24 456 L 60 456" fill="none" stroke="#00f2fe" stroke-width="3" stroke-linecap="round"/>
+  <path d="M 1256 420 L 1256 456 L 1220 456" fill="none" stroke="#ff007f" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Technical Telemetry Horizontal Scanner Lines -->
+  <line x1="80" y1="105" x2="380" y2="105" stroke="#00f2fe" stroke-width="1.5" stroke-opacity="0.4" stroke-dasharray="6,4"/>
+  <line x1="390" y1="105" x2="440" y2="105" stroke="#ff007f" stroke-width="2.5" stroke-opacity="0.7"/>
+  <circle cx="448" cy="105" r="3" fill="#00f2fe" filter="url(#glow)"/>
+
+  <!-- Tag / Protocol Label -->
+  <rect x="80" y="65" width="230" height="26" rx="6" fill="#0c1228" stroke="#00f2fe" stroke-opacity="0.4" stroke-width="1"/>
+  <text x="92" y="82" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace" font-size="11" font-weight="700" fill="#00f2fe" letter-spacing="1.5">
+    RUNTIME DEFENSE PLATFORM
+  </text>
+  <circle cx="295" cy="78" r="4" fill="#00ff88" filter="url(#glow)"/>
+
+  <!-- Main Acronym: ACIDS (High impact typography) -->
+  <g filter="url(#heavyGlow)">
+    <text x="80" y="195" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Montserrat, Arial, sans-serif" font-size="94" font-weight="900" fill="url(#neonCyanPink)" letter-spacing="4">
+      ACIDS
+    </text>
+  </g>
+  <text x="80" y="195" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Montserrat, Arial, sans-serif" font-size="94" font-weight="900" fill="#ffffff" letter-spacing="4" fill-opacity="0.95">
+    ACIDS
+  </text>
+
+  <!-- Full Name -->
+  <text x="84" y="240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="22" font-weight="700" fill="#f0f4f8" letter-spacing="1.2">
+    Autonomous Cybersecurity Incident Detection and Response System
+  </text>
+
+  <!-- Subtitle / Architecture Invariants -->
+  <text x="84" y="278" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="500" fill="#a0aec0" letter-spacing="0.5">
+    Strictly Split Architecture: <tspan fill="#00f2fe" font-weight="700">P0 Hot-Path Deterministic Defense</tspan> &amp; <tspan fill="#ff007f" font-weight="700">P1 Fail-Closed Autonomous Reclaim</tspan>
+  </text>
+
+  <!-- Spec Pills / Badges in Banner -->
+  <g transform="translate(84, 320)">
+    <!-- Pill 1: eBPF + Falco -->
+    <rect x="0" y="0" width="135" height="32" rx="7" fill="#0f172a" stroke="#38bdf8" stroke-width="1.2"/>
+    <text x="14" y="20" font-family="monospace" font-size="12" font-weight="700" fill="#38bdf8">⚡ eBPF &amp; FALCO</text>
+
+    <!-- Pill 2: Sub-ms Hot Path -->
+    <rect x="147" y="0" width="168" height="32" rx="7" fill="#0f172a" stroke="#34d399" stroke-width="1.2"/>
+    <text x="160" y="20" font-family="monospace" font-size="12" font-weight="700" fill="#34d399">🛡️ SUB-MS HOT PATH</text>
+
+    <!-- Pill 3: Fail Closed -->
+    <rect x="327" y="0" width="165" height="32" rx="7" fill="#0f172a" stroke="#f43f5e" stroke-width="1.2"/>
+    <text x="340" y="20" font-family="monospace" font-size="12" font-weight="700" fill="#f43f5e">🔒 FAIL-CLOSED P1</text>
+
+    <!-- Pill 4: Hash-Chain -->
+    <rect x="504" y="0" width="170" height="32" rx="7" fill="#0f172a" stroke="#c084fc" stroke-width="1.2"/>
+    <text x="517" y="20" font-family="monospace" font-size="12" font-weight="700" fill="#c084fc">⛓️ AUDIT HASH CHAIN</text>
+  </g>
+
+  <!-- Technical Guarantee Footer Line -->
+  <g transform="translate(84, 400)">
+    <text x="0" y="0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', monospace" font-size="13" font-weight="600" fill="#718096">
+      ZERO HALLUCINATIONS IN CONTAINMENT PATH • POST-CONTAINMENT DOWNSTREAM LLM (OLLAMA) • CANARY-GATED ROLLBACK
+    </text>
+  </g>
+
+  <!-- RIGHT SIDE: Glowing Cyber Shield & Lock Visual (Inspiration 1: Magenta Neon Lock Glow) -->
+  <g transform="translate(1000, 240)">
+    <!-- Big Outer Radial Glow -->
+    <circle cx="0" cy="0" r="180" fill="url(#lockAura)" filter="url(#heavyGlow)"/>
+
+    <!-- Concentric Target Circles / Cyber Dial -->
+    <circle cx="0" cy="0" r="140" fill="none" stroke="#251b3d" stroke-width="1.5"/>
+    <circle cx="0" cy="0" r="125" fill="none" stroke="#ff007f" stroke-width="1.5" stroke-dasharray="14,8,4,8" stroke-opacity="0.5"/>
+    <circle cx="0" cy="0" r="105" fill="none" stroke="#00f2fe" stroke-width="1" stroke-dasharray="2,6" stroke-opacity="0.6"/>
+
+    <!-- Shield Geometry Background -->
+    <path d="M 0 -95 L 75 -60 L 75 25 C 75 75 0 110 0 110 C 0 110 -75 75 -75 25 L -75 -60 Z" 
+          fill="#0c071d" fill-opacity="0.85" stroke="url(#borderGlow)" stroke-width="2.5" filter="url(#glow)"/>
+
+    <!-- Glowing Cyber Padlock -->
+    <g transform="translate(0, 5)">
+      <!-- Shackle (Arch) -->
+      <path d="M -30 -15 L -30 -42 C -30 -62 30 -62 30 -42 L 30 -15" 
+            fill="none" stroke="url(#cyberLockGradient)" stroke-width="14" stroke-linecap="round" filter="url(#heavyGlow)"/>
+      <path d="M -30 -15 L -30 -42 C -30 -62 30 -62 30 -42 L 30 -15" 
+            fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+
+      <!-- Lock Body -->
+      <rect x="-48" y="-15" width="96" height="76" rx="14" fill="url(#cyberLockGradient)" filter="url(#heavyGlow)"/>
+      <rect x="-48" y="-15" width="96" height="76" rx="14" fill="url(#cyberLockGradient)"/>
+      <rect x="-44" y="-11" width="88" height="68" rx="11" fill="#13082a"/>
+
+      <!-- Keyhole -->
+      <circle cx="0" cy="15" r="9" fill="#00f2fe" filter="url(#glow)"/>
+      <polygon points="-5,17 5,17 3,36 -3,36" fill="#00f2fe" filter="url(#glow)"/>
+      <circle cx="0" cy="15" r="4" fill="#ffffff"/>
+    </g>
+
+    <!-- Orbiting Satellite Indicator Beads -->
+    <circle cx="120" cy="-60" r="5" fill="#ff007f" filter="url(#glow)"/>
+    <circle cx="-110" cy="70" r="4" fill="#00f2fe" filter="url(#glow)"/>
+    <circle cx="80" cy="110" r="3" fill="#34d399" filter="url(#glow)"/>
+  </g>
+</svg>
